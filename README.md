@@ -12,7 +12,7 @@ A web-based mini-compiler featuring a custom lexer, parser, and interpreter. Bui
 
 | Name | Role |
 |---|---|
-| Kiarash Shamspour | Developer |
+| Kiarash Shamspour | Documentation and Tester |
 | Xavier Imbang | Developer |
 
 ---
