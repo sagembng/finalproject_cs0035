@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini Compiler — Allison Burgers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+     
+      --bg:        #F5F0E6; 
+      --surface:   #FFFFFF; 
+      --surface2:  #F0EAD6; 
+      --border:    #DCD3C0; 
+      
+      --cyan:      #0077C0; 
+      --pink:      #D32F2F; 
+      --green:     #00873E; 
+      --yellow:    #F5A623; 
+      
+      --text:      #1A2421; 
+      --muted:     #7A7D79; 
+      --error:     #D32F2F;
+      
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'Syne', sans-serif;
+      --radius:    10px;
+      --glow-c:    0 0 15px rgba(0,119,192,0.25);
+      --glow-p:    0 0 15px rgba(211,47,47,0.25);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── BACKGROUND DECORATION ───────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 10% 5%,  rgba(0,135,62,0.05) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 35% at 90% 90%, rgba(211,47,47,0.04) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(245,166,35,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* ── LAYOUT ──────────────────────────────────────────────────── */
+    .wrapper {
+      position: relative; z-index: 1;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+    }
+
+    /* ── HEADER ──────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 24px;
+      border-bottom: 2px dashed var(--border);
+      margin-bottom: 36px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex; align-items: center; gap: 14px;
+    }
+
+    .brand-text h1 {
+      font-family: var(--sans);
+      font-weight: 800;
+      font-size: 26px;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .brand-text p {
+      font-size: 12px; color: var(--muted);
+      letter-spacing: 0.5px; margin-top: 2px;
+      font-weight: 500;
+    }
+
+    .meta-pills {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid;
+      letter-spacing: 0.3px;
+    }
+    .pill-cyan  { color: var(--cyan);  border-color: rgba(0,119,192,0.3);  background: rgba(0,119,192,0.08); }
+    .pill-pink  { color: var(--pink);  border-color: rgba(211,47,47,0.3); background: rgba(211,47,47,0.08); }
+
+    /* ── PIPELINE DISPLAY ────────────────────────────────────────── */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      overflow-x: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    }
+
+    .pipeline-step {
+      display: flex; align-items: center; gap: 8px;
+      white-space: nowrap;
+      font-size: 12px; font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.4px;
+    }
+
+    .pipeline-step.active { color: var(--green); }
+    .pipeline-step.active .step-dot { background: var(--green); box-shadow: 0 0 8px rgba(0,135,62,0.4); }
+
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .pipeline-arrow {
+      color: var(--border);
+      padding: 0 12px;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ── MAIN GRID ───────────────────────────────────────────────── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── PANEL ───────────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      transition: border-color 0.3s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    }
+
+    .panel:focus-within {
+      border-color: rgba(0,135,62,0.4);
+    }
+
+    .panel-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+
+    .panel-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .panel-title .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+
+    .dot-cyan  { background: var(--cyan); }
+    .dot-pink  { background: var(--pink); }
+    .dot-green { background: var(--green); }
+    .dot-yellow{ background: var(--yellow); }
+
+    .panel-action {
+      font-size: 10px; color: var(--muted);
+      cursor: pointer; letter-spacing: 0.3px;
+      border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 8px;
+      transition: all 0.2s; background: var(--surface); 
+      font-weight: 600;
+    }
+    .panel-action:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── EDITOR ──────────────────────────────────────────────────── */
+    .editor-wrap {
+      display: flex; flex: 1; min-height: 320px;
+    }
+
+    .line-numbers {
+      padding: 16px 10px 16px 14px;
+      background: rgba(0,0,0,0.02);
+      border-right: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px; line-height: 1.6;
+      text-align: right;
+      user-select: none;
+      min-width: 44px;
+      overflow: hidden;
+    }
+
+    #code-editor {
+      flex: 1;
+      background: transparent;
+      border: none; outline: none;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13.5px; line-height: 1.6;
+      padding: 16px;
+      resize: none;
+      tab-size: 2;
+      caret-color: var(--green);
+      font-weight: 500;
+    }
+
+    /* ── INPUTS SECTION ──────────────────────────────────────────── */
+    .inputs-section {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      background: var(--surface2);
+    }
+
+    .inputs-label {
+      font-size: 10px; font-weight: 700; color: var(--text);
+      letter-spacing: 0.6px; text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    .inputs-hint {
+      font-size: 10px; color: var(--muted);
+      margin-top: 4px; font-weight: 500;
+    }
+
+    #inputs-field {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px; font-weight: 500;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #inputs-field:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,119,192,0.1); }
+    #inputs-field::placeholder { color: #A0A0A0; }
+
+    /* ── RUN BUTTON ──────────────────────────────────────────────── */
+    .run-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      gap: 12px;
+    }
+
+    .run-btn {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 28px;
+      border-radius: 8px;
+      border: none; cursor: pointer;
+      font-family: var(--mono); font-size: 13px; font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, var(--green), #006D32);
+      color: #FFFFFF;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(0,135,62,0.2);
+      position: relative; overflow: hidden;
+    }
+
+    .run-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,135,62,0.3);
+    }
+
+    .run-btn:active { transform: translateY(0); }
+
+    .run-btn.loading {
+      background: linear-gradient(135deg, #999, #777);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .run-btn .btn-icon { font-size: 15px; }
+
+    .status-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 3px 10px; border-radius: 4px;
+    }
+    .status-idle   { color: var(--muted); border: 1px solid var(--border); background: var(--surface2); }
+    .status-ok     { color: var(--green);  border: 1px solid rgba(0,135,62,0.3); background: rgba(0,135,62,0.08); }
+    .status-error  { color: var(--error);  border: 1px solid rgba(211,47,47,0.3);   background: rgba(211,47,47,0.08); }
+    .status-running{ color: var(--cyan);   border: 1px solid rgba(0,119,192,0.3);   background: rgba(0,119,192,0.08); }
+
+    /* ── OUTPUT PANEL ────────────────────────────────────────────── */
+    .output-panel {
+      display: flex; flex-direction: column;
+      gap: 0;
+    }
+
+    .output-block {
+      flex: 1;
+      display: flex; flex-direction: column;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .output-block:last-child { border-bottom: none; }
+
+    .output-content {
+      padding: 14px 16px;
+      font-size: 12.5px; line-height: 1.7;
+      overflow-y: auto;
+      max-height: 220px;
+      min-height: 80px;
+    }
+
+    .empty-hint {
+      color: var(--muted);
+      font-style: italic;
+      font-size: 11px;
+    }
+
+    /* ── TOKEN DISPLAY ───────────────────────────────────────────── */
+    .token-list {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+
+    .token-chip {
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .token-KEYWORD    { color: var(--pink);   background: rgba(211,47,47,0.08);  border: 1px solid rgba(211,47,47,0.2); }
+    .token-IDENTIFIER { color: var(--cyan);   background: rgba(0,119,192,0.08);  border: 1px solid rgba(0,119,192,0.2); }
+    .token-NUMBER     { color: #D48000;       background: rgba(245,166,35,0.12); border: 1px solid rgba(245,166,35,0.3); }
+    .token-SYMBOL     { color: var(--green);  background: rgba(0,135,62,0.08);   border: 1px solid rgba(0,135,62,0.2); }
+
+    /* ── PROGRAM OUTPUT ──────────────────────────────────────────── */
+    .output-line {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .output-line::before {
+      content: '▶';
+      color: var(--cyan);
+      font-size: 10px;
+    }
+
+    .output-value {
+      color: var(--text);
+      font-size: 14px; font-weight: 700;
+    }
+
+    /* ── ERRORS ──────────────────────────────────────────────────── */
+    .error-item {
+      display: flex; gap: 8px;
+      margin-bottom: 6px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: rgba(211,47,47,0.06);
+      border: 1px solid rgba(211,47,47,0.15);
+      font-size: 12px; font-weight: 500;
+      color: var(--error);
+      line-height: 1.5;
+    }
+
+    .error-item::before {
+      content: '✕';
+      font-size: 11px; flex-shrink: 0; margin-top: 2px;
+    }
+
+    /* ── SYMBOL TABLE ────────────────────────────────────────────── */
+    .sym-table {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+
+    .sym-entry {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+
+    .sym-name {
+      font-size: 11px; color: var(--cyan); font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .sym-val {
+      font-size: 15px; font-weight: 700;
+      color: var(--text);
+    }
+
+    .sym-val.uninit { color: var(--muted); font-size: 12px; font-style: italic; font-weight: 500; }
+
+    /* ── BOTTOM FULL ROW ─────────────────────────────────────────── */
+    .bottom-row {
+      margin-top: 20px;
+    }
+
+    /* ── SCROLLBAR ───────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #C4C4C4; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A0A0A0; }
+
+    /* ── SPINNER ─────────────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #FFFFFF;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    /* ── EXAMPLE BUTTONS ─────────────────────────────────────────── */
+    .examples-bar {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+
+    .examples-label {
+      font-size: 10px; font-weight: 700; color: var(--text);
+      letter-spacing: 0.5px; text-transform: uppercase;
+      margin-right: 4px;
+    }
+
+    .ex-btn {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px; font-family: var(--mono); font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+
+    .ex-btn:hover { border-color: var(--green); color: var(--green); background: rgba(0,135,62,0.05); }
+
+    /* ── FADE-IN ─────────────────────────────────────────────────── */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.3s ease forwards; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="brand">
+      <div class="brand-text">
+        <h1>Mini Compiler</h1>
+        <p>CS0035 · Allison Burgers · Section TN31</p>
+      </div>
+    </div>
+    <div class="meta-pills">
+      <span class="pill pill-cyan">Kiarash Shamspour</span>
+      <span class="pill pill-pink">Xavier Imbang</span>
+    </div>
+  </header>
+
+  <div class="pipeline">
+    <div class="pipeline-step active">
+      <span class="step-dot"></span> Source Code
+    </div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-step active" id="step-lex">
+      <span class="step-dot"></span> Lexical Analysis
+    </div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-step" id="step-parse">
+      <span class="step-dot"></span> Syntax Parsing
+    </div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-step" id="step-sem">
+      <span class="step-dot"></span> Semantic Check
+    </div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-step" id="step-exec">
+      <span class="step-dot"></span> Execution
+    </div>
+    <span class="pipeline-arrow">→</span>
+    <div class="pipeline-step" id="step-out">
+      <span class="step-dot"></span> Output
+    </div>
+  </div>
+
+  <div class="examples-bar">
+    <span class="examples-label">Load example:</span>
+    <button class="ex-btn" onclick="loadExample('basic')">Basic I/O</button>
+    <button class="ex-btn" onclick="loadExample('arithmetic')">Arithmetic</button>
+    <button class="ex-btn" onclick="loadExample('parens')">Parentheses</button>
+    <button class="ex-btn" onclick="loadExample('error')">Syntax Error</button>
+    <button class="ex-btn" onclick="loadExample('undeclared')">Undeclared Var</button>
+  </div>
+
+  <div class="main-grid">
+
+    <div class="panel" style="display:flex;flex-direction:column;">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot dot-cyan"></span>
+          Source Code Editor
+        </div>
+        <button class="panel-action" onclick="clearEditor()">clear</button>
+      </div>
+      <div class="editor-wrap">
+        <div class="line-numbers" id="line-numbers">1</div>
+        <textarea id="code-editor" spellcheck="false" placeholder="// Write your program here...
+var x;
+var y;
+input x;
+input y;
+output x;"></textarea>
+      </div>
+      <div class="inputs-section">
+        <div class="inputs-label">
+          <span class="dot dot-yellow" style="width:5px;height:5px;border-radius:50%;background:var(--yellow);flex-shrink:0;"></span>
+          Input Values
+        </div>
+        <input id="inputs-field" type="text" placeholder="e.g.  5  3  10" />
+        <div class="inputs-hint">Space-separated integers for each <code style="color:var(--cyan); font-weight: 700;">input</code> statement</div>
+      </div>
+      <div class="run-bar">
+        <button class="run-btn" id="run-btn" onclick="runProgram()">
+          <span class="btn-icon" id="btn-icon">▶</span>
+          <span id="btn-text">Run Program</span>
+        </button>
+        <span class="status-tag status-idle" id="status-tag">IDLE</span>
+      </div>
+    </div>
+
+    <div class="panel output-panel">
+
+      <div class="output-block">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="dot dot-pink"></span>
+            Token Stream
+          </div>
+          <span id="token-count" style="font-size:10px;font-weight:600;color:var(--muted)"></span>
+        </div>
+        <div class="output-content" id="tokens-out">
+          <span class="empty-hint">Tokens will appear here after running.</span>
+        </div>
+      </div>
+
+      <div class="output-block">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="dot dot-green"></span>
+            Program Output
+          </div>
+        </div>
+        <div class="output-content" id="program-out">
+          <span class="empty-hint">Output statements will appear here.</span>
+        </div>
+      </div>
+
+      <div class="output-block">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="dot" style="background:var(--error);"></span>
+            Errors
+          </div>
+          <span id="error-count" style="font-size:10px;font-weight:600;color:var(--muted)"></span>
+        </div>
+        <div class="output-content" id="errors-out">
+          <span class="empty-hint">No errors detected.</span>
+        </div>
+      </div>
+
+    </div>
+  </div><div class="bottom-row">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot dot-yellow"></span>
+          Symbol Table
+        </div>
+        <span style="font-size:10px;font-weight:600;color:var(--muted)" id="sym-count"></span>
+      </div>
+      <div class="output-content" id="sym-out" style="max-height:160px;">
+        <span class="empty-hint">Variable states will appear here after execution.</span>
+      </div>
+    </div>
+  </div>
+
+</div><script>
+  /* ── LINE NUMBERS ─────────────────────────────────────────────── */
+  const editor = document.getElementById('code-editor');
+  const lineNums = document.getElementById('line-numbers');
+
+  function updateLineNumbers() {
+    const lines = editor.value.split('\n').length;
+    lineNums.textContent = Array.from({length: lines}, (_, i) => i + 1).join('\n');
+    lineNums.scrollTop = editor.scrollTop;
+  }
+
+  editor.addEventListener('input', updateLineNumbers);
+  editor.addEventListener('scroll', () => { lineNums.scrollTop = editor.scrollTop; });
+  editor.addEventListener('keydown', e => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = editor.selectionStart, end = editor.selectionEnd;
+      editor.value = editor.value.substring(0, s) + '  ' + editor.value.substring(end);
+      editor.selectionStart = editor.selectionEnd = s + 2;
+      updateLineNumbers();
+    }
+  });
+
+  /* ── EXAMPLE PROGRAMS ─────────────────────────────────────────── */
+  const EXAMPLES = {
+    basic: {
+      code: `var x;\nvar y;\n\ninput x;\ninput y;\n\noutput x;\noutput y;`,
+      inputs: '7 13'
+    },
+    arithmetic: {
+      code: `var x;\nvar y;\nvar z;\n\ninput x;\ninput y;\n\nz = x + y * 2;\n\noutput z;`,
+      inputs: '3 4'
+    },
+    parens: {
+      code: `var x;\nvar y;\nvar z;\n\ninput x;\ninput y;\n\nz = (x + y) * 2;\n\noutput z;`,
+      inputs: '5 3'
+    },
+    error: {
+      code: `var x;\nx = 10\noutput x;`,
+      inputs: ''
+    },
+    undeclared: {
+      code: `var x;\nx = 5;\noutput y;`,
+      inputs: ''
+    }
+  };
+
+  function loadExample(key) {
+    const ex = EXAMPLES[key];
+    editor.value = ex.code;
+    document.getElementById('inputs-field').value = ex.inputs;
+    updateLineNumbers();
+    resetOutputs();
+  }
+
+  function clearEditor() {
+    editor.value = '';
+    document.getElementById('inputs-field').value = '';
+    updateLineNumbers();
+    resetOutputs();
+  }
+
+  /* ── PIPELINE HIGHLIGHT ───────────────────────────────────────── */
+  const pipelineSteps = ['step-lex','step-parse','step-sem','step-exec','step-out'];
+
+  function highlightPipeline(upTo) {
+    pipelineSteps.forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.classList.toggle('active', i <= upTo);
+    });
+  }
+
+  /* ── RESET OUTPUTS ────────────────────────────────────────────── */
+  function resetOutputs() {
+    setEl('tokens-out', '<span class="empty-hint">Tokens will appear here after running.</span>');
+    setEl('program-out', '<span class="empty-hint">Output statements will appear here.</span>');
+    setEl('errors-out',  '<span class="empty-hint">No errors detected.</span>');
+    setEl('sym-out',     '<span class="empty-hint">Variable states will appear here after execution.</span>');
+    document.getElementById('token-count').textContent = '';
+    document.getElementById('error-count').textContent = '';
+    document.getElementById('sym-count').textContent = '';
+    highlightPipeline(-1);
+  }
+
+  function setEl(id, html) {
+    document.getElementById(id).innerHTML = html;
+  }
+
+  /* ── RUN PROGRAM ──────────────────────────────────────────────── */
+  async function runProgram() {
+    const code = editor.value.trim();
+    if (!code) return;
+
+    const btn = document.getElementById('run-btn');
+    const btnIcon = document.getElementById('btn-icon');
+    const btnText = document.getElementById('btn-text');
+    const statusTag = document.getElementById('status-tag');
+
+    // Loading state
+    btn.classList.add('loading');
+    btnIcon.innerHTML = '<span class="spinner"></span>';
+    btnText.textContent = 'Running...';
+    statusTag.className = 'status-tag status-running';
+    statusTag.textContent = 'RUNNING';
+    resetOutputs();
+
+    const inputsRaw = document.getElementById('inputs-field').value.trim();
+    const inputValues = inputsRaw
+      ? inputsRaw.split(/\s+/).map(v => parseInt(v, 10)).filter(v => !isNaN(v))
+      : [];
+
+    try {
+      const res = await fetch('/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, inputs: inputValues })
+      });
+      const data = await res.json();
+      renderResults(data);
+    } catch (err) {
+      setEl('errors-out', `<div class="error-item">Network error: ${err.message}</div>`);
+      statusTag.className = 'status-tag status-error';
+      statusTag.textContent = 'ERROR';
+    } finally {
+      btn.classList.remove('loading');
+      btnIcon.textContent = '▶';
+      btnText.textContent = 'Run Program';
+    }
+  }
+
+  /* ── RENDER RESULTS ───────────────────────────────────────────── */
+  function renderResults(data) {
+    const statusTag = document.getElementById('status-tag');
+    const hasErrors = data.errors && data.errors.length > 0;
+
+    /* Tokens */
+    if (data.tokens && data.tokens.length) {
+      highlightPipeline(0);
+      const html = '<div class="token-list fade-in">' +
+        data.tokens.map(t => {
+          const m = t.match(/^\((\w+),\s*(.+)\)$/);
+          if (!m) return `<span class="token-chip">${t}</span>`;
+          return `<span class="token-chip token-${m[1]}">${m[1]}<span style="opacity:.5;margin:0 2px">·</span>${m[2]}</span>`;
+        }).join('') + '</div>';
+      setEl('tokens-out', html);
+      document.getElementById('token-count').textContent = `${data.tokens.length} tokens`;
+    }
+
+    /* Program output */
+    if (data.output && data.output.length) {
+      highlightPipeline(4);
+      const html = '<div class="output-lines fade-in">' +
+        data.output.map(line =>
+          `<div class="output-line"><span class="output-value">${escHtml(line)}</span></div>`
+        ).join('') + '</div>';
+      setEl('program-out', html);
+    } else if (!hasErrors && data.tokens && data.tokens.length) {
+      setEl('program-out', '<span class="empty-hint">Program ran successfully — no output statements.</span>');
+    }
+
+    /* Errors */
+    if (hasErrors) {
+      const html = '<div class="fade-in">' +
+        data.errors.map(e => `<div class="error-item">${escHtml(e)}</div>`).join('') +
+        '</div>';
+      setEl('errors-out', html);
+      document.getElementById('error-count').textContent = `${data.errors.length} error(s)`;
+      statusTag.className = 'status-tag status-error';
+      statusTag.textContent = 'ERRORS';
+      highlightError(data.errors[0]);
+    } else {
+      setEl('errors-out', '<span class="empty-hint" style="color:var(--green); font-weight:600;">✓ No errors detected.</span>');
+      statusTag.className = 'status-tag status-ok';
+      statusTag.textContent = 'SUCCESS';
+      if (!hasErrors && data.tokens) highlightPipeline(5);
+    }
+
+    /* Symbol table */
+    if (data.symbol_table && Object.keys(data.symbol_table).length) {
+      const entries = Object.entries(data.symbol_table);
+      const html = '<div class="sym-table fade-in">' +
+        entries.map(([k, v]) => {
+          const isUninit = v === 'uninitialized';
+          return `<div class="sym-entry">
+            <div class="sym-name">${escHtml(k)}</div>
+            <div class="sym-val ${isUninit ? 'uninit' : ''}">${escHtml(String(v))}</div>
+          </div>`;
+        }).join('') + '</div>';
+      setEl('sym-out', html);
+      document.getElementById('sym-count').textContent = `${entries.length} variable(s)`;
+    }
+  }
+
+  function highlightError(errMsg) {
+    if (errMsg.includes('Lexical')) highlightPipeline(0);
+    else if (errMsg.includes('Syntax')) highlightPipeline(1);
+    else if (errMsg.includes('Semantic')) highlightPipeline(2);
+    else if (errMsg.includes('Runtime')) highlightPipeline(3);
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Ctrl+Enter to run ────────────────────────────────────────── */
+  editor.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      runProgram();
+    }
+  });
+
+  /* ── INIT ─────────────────────────────────────────────────────── */
+  updateLineNumbers();
+</script>
+</body>
+</html>

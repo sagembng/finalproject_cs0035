@@ -1,0 +1,11 @@
+var x;
+var y;
+var z;
+
+input x;
+input y;
+
+z = 5;
+output x;
+output y;
+output z;
